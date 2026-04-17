@@ -1,299 +1,699 @@
-/* ==========================================================
-   WANO CLOUD PANEL - CORE ENGINE (PTERODACTYL CLONE)
-   Version: 4.0.0 (Ultra Realistic Edition)
-   Author: wn6b
-   Environment: Web (GitHub Pages / Normal Host) + Firebase
-   Security Level: AI-Enforced (No Discord Self-Bots)
-   ========================================================== */
-
-// 1. إعدادات قاعدة البيانات (Firebase v8)
+// ===== FIREBASE CONFIG =====
+// ملاحظة لمروان: لا تنسى تحط مفاتيح الفايربيس الحقيقية مالتك هنا
 const firebaseConfig = {
-    databaseURL: "https://wano-studio-default-rtdb.firebaseio.com"
+  databaseURL: "https://wano-studio-default-rtdb.firebaseio.com",
+  apiKey: "AIzaSyPlaceholder_ReplaceWithYourKey",
+  authDomain: "wano-studio.firebaseapp.com",
+  projectId: "wano-studio",
+  storageBucket: "wano-studio.appspot.com",
+  messagingSenderId: "000000000000",
+  appId: "1:000000000000:web:placeholder"
 };
+
 firebase.initializeApp(firebaseConfig);
-const database = firebase.database();
+const auth = firebase.auth();
+const db = firebase.database();
 
-// 2. إعدادات النظام الأساسية
-const SYSTEM_CONFIG = {
-    MAX_CPU: 500, // 500% CPU (5 vCores)
-    MAX_RAM: 32768, // 32 GB RAM in MB
-    MAX_DISK: 102400, // 100 GB NVMe in MB
-    NODE_LOCATION: "Node-DE-01 (Germany)",
-    ADMIN_KEY: 'f!2HgJv#)"E"y^i' // مفتاح التشفير الخاص بك
-};
+// ===== STATE =====
+let currentUser = null;
+let userBots = [];
 
-// 3. إدارة واجهة المستخدم (UI Controller)
-const UI = {
-    showLoader: function() {
-        const loader = document.getElementById('page-loader');
-        if(loader) loader.style.display = 'block';
-    },
-    hideLoader: function() {
-        const loader = document.getElementById('page-loader');
-        if(loader) {
-            setTimeout(() => { loader.style.display = 'none'; }, 800);
-        }
-    },
-    updateServerCount: function(count) {
-        // تحديث إحصائيات لوحة التحكم
-        console.log(`[SYSTEM]: Active servers count updated to ${count}`);
-    }
-};
-
-// 4. نظام النوافذ المنبثقة (Modal Controller)
-let selectedSoftware = 'Node.js (v20)';
-
-function openCreateModal() {
-    const modal = document.getElementById('createModal');
-    if (modal) {
-        modal.style.display = 'flex';
-        // إضافة تأثير الدخول
-        setTimeout(() => { modal.classList.add('active'); }, 10);
-    }
-}
-
-function closeCreateModal() {
-    const modal = document.getElementById('createModal');
-    if (modal) {
-        modal.classList.remove('active');
-        setTimeout(() => { modal.style.display = 'none'; }, 300);
-    }
-}
-
-// تفعيل اختيار بيئة البرمجة
-document.addEventListener('DOMContentLoaded', () => {
-    UI.showLoader();
-    
-    // مراقبة اختيار السوفتوير
-    const options = document.querySelectorAll('.option-card');
-    options.forEach(opt => {
-        opt.addEventListener('click', (e) => {
-            options.forEach(o => o.classList.remove('selected'));
-            e.target.classList.add('selected');
-            selectedSoftware = e.target.innerText;
-        });
-    });
-
-    // تحميل الخوادم
-    ServerManager.fetchServers();
+// ===== CURSOR GLOW =====
+const cursorGlow = document.getElementById('cursorGlow');
+document.addEventListener('mousemove', e => {
+  cursorGlow.style.left = e.clientX + 'px';
+  cursorGlow.style.top = e.clientY + 'px';
+});
+document.addEventListener('mousedown', () => {
+  cursorGlow.style.width = '18px';
+  cursorGlow.style.height = '18px';
+});
+document.addEventListener('mouseup', () => {
+  cursorGlow.style.width = '28px';
+  cursorGlow.style.height = '28px';
 });
 
-// 5. محرك الذكاء الاصطناعي (AI Shield Logic)
-const AIShield = {
-    scanDeployment: function(serverName, software) {
-        return new Promise((resolve, reject) => {
-            console.log(`[AI-SHIELD]: Scanning deployment request for '${serverName}'...`);
-            setTimeout(() => {
-                const blacklist = ['selfbot', 'ddos', 'miner', 'hack'];
-                const isClean = !blacklist.some(word => serverName.toLowerCase().includes(word));
-                
-                if (isClean) {
-                    resolve("CLEAN");
-                } else {
-                    reject("MALICIOUS_ACTIVITY_DETECTED");
-                }
-            }, 1500); // محاكاة وقت الفحص
-        });
-    }
-};
+// ===== PARTICLE CANVAS =====
+const canvas = document.getElementById('particleCanvas');
+const ctx = canvas.getContext('2d');
+let particles = [];
 
-// 6. إدارة الخوادم (Server Manager)
-const ServerManager = {
-    generateUUID: function() {
-        return 'WN-' + Math.random().toString(36).substring(2, 8).toUpperCase() + '-' + Date.now().toString().substring(8);
-    },
+function resizeCanvas() {
+  canvas.width = window.innerWidth;
+  canvas.height = window.innerHeight;
+}
+resizeCanvas();
+window.addEventListener('resize', resizeCanvas);
 
-    createServer: async function() {
-        const nameInput = document.getElementById('serverName');
-        const name = nameInput.value.trim();
-
-        if (name.length < 4) {
-            alert("[ERROR]: اسم الخادم يجب أن يكون 4 أحرف على الأقل.");
-            return;
-        }
-
-        try {
-            // 1. فحص الذكاء الاصطناعي
-            await AIShield.scanDeployment(name, selectedSoftware);
-            
-            // 2. إنشاء السيرفر في قاعدة البيانات
-            const serverId = this.generateUUID();
-            const serverData = {
-                id: serverId,
-                name: name,
-                software: selectedSoftware,
-                node: SYSTEM_CONFIG.NODE_LOCATION,
-                status: "installing", // يبدأ بالتثبيت
-                cpu_usage: 0.0,
-                ram_usage: 0,
-                disk_usage: 120, // OS Base usage
-                created_at: Date.now(),
-                owner: "wn6b"
-            };
-
-            await database.ref('servers/' + serverId).set(serverData);
-            console.log(`[WANO-DAEMON]: Server ${serverId} container created.`);
-            
-            closeCreateModal();
-            nameInput.value = '';
-            
-            // 3. محاكاة عملية التثبيت (Installation Process)
-            this.simulateInstallation(serverId);
-
-        } catch (error) {
-            alert(`[AI SHIELD BLOCK]: تم رفض الإنشاء. السبب: ${error}`);
-        }
-    },
-
-    simulateInstallation: function(serverId) {
-        // محاكاة سحب الحزم وتثبيت Node.js
-        setTimeout(() => {
-            database.ref('servers/' + serverId).update({ status: "starting" });
-        }, 4000);
-
-        setTimeout(() => {
-            database.ref('servers/' + serverId).update({ 
-                status: "running",
-                cpu_usage: (Math.random() * 5 + 0.1).toFixed(2), // استهلاك مبدئي
-                ram_usage: Math.floor(Math.random() * 200) + 50 // 50-250MB RAM
-            });
-        }, 8000);
-    },
-
-    fetchServers: function() {
-        const container = document.getElementById('serversContainer');
-        
-        database.ref('servers').on('value', (snapshot) => {
-            container.innerHTML = '';
-            let serverCount = 0;
-
-            if (!snapshot.exists()) {
-                container.innerHTML = `<div style="grid-column: 1/-1; text-align: center; color: #707070; padding: 40px;">لا يوجد خوادم نشطة حالياً. قم بإنشاء خادمك الأول.</div>`;
-                UI.hideLoader();
-                return;
-            }
-
-            snapshot.forEach((child) => {
-                serverCount++;
-                const server = child.val();
-                this.renderServerCard(server, container);
-            });
-
-            UI.updateServerCount(serverCount);
-            UI.hideLoader();
-        });
-    },
-
-    renderServerCard: function(server, container) {
-        const card = document.createElement('div');
-        card.className = 'server-card';
-        
-        // حساب النسب المئوية للـ Progress Bars
-        const cpuPercent = Math.min((server.cpu_usage / SYSTEM_CONFIG.MAX_CPU) * 100, 100).toFixed(1);
-        const ramPercent = Math.min((server.ram_usage / SYSTEM_CONFIG.MAX_RAM) * 100, 100).toFixed(1);
-
-        // تحديد لون وحالة السيرفر
-        let statusClass = 'status-offline';
-        let statusText = 'Offline';
-        
-        if (server.status === 'running') {
-            statusClass = 'status-online';
-            statusText = 'Running';
-        } else if (server.status === 'installing') {
-            statusClass = 'status-installing';
-            statusText = 'Installing...';
-        } else if (server.status === 'starting') {
-            statusClass = 'status-starting';
-            statusText = 'Starting...';
-        }
-
-        card.innerHTML = `
-            <div class="server-header">
-                <div class="server-title-group">
-                    <h3>${server.name}</h3>
-                    <span class="server-uuid">${server.id}</span>
-                </div>
-                <div class="status-indicator ${statusClass}">
-                    <span class="dot"></span> ${statusText}
-                </div>
-            </div>
-
-            <div class="server-info">
-                <div class="info-item">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5"></path></svg>
-                    ${server.node}
-                </div>
-                <div class="info-item">
-                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9.4 16.6L4.8 12l4.6-4.6L8 6l-6 6 6 6 1.4-1.4zm5.2 0l4.6-4.6-4.6-4.6L16 6l6 6-6 6-1.4-1.4z"/></svg>
-                    ${server.software}
-                </div>
-            </div>
-
-            <div class="server-resources">
-                <div class="resource-block">
-                    <div class="res-header">
-                        <span>CPU Load</span>
-                        <span>${server.cpu_usage}% / 500%</span>
-                    </div>
-                    <div class="res-bar-bg"><div class="res-bar-fill cpu-fill" style="width: ${cpuPercent}%"></div></div>
-                </div>
-                
-                <div class="resource-block">
-                    <div class="res-header">
-                        <span>Memory (RAM)</span>
-                        <span>${(server.ram_usage / 1024).toFixed(2)} GB / 32 GB</span>
-                    </div>
-                    <div class="res-bar-bg"><div class="res-bar-fill ram-fill" style="width: ${ramPercent}%"></div></div>
-                </div>
-            </div>
-
-            <div class="server-actions">
-                <button class="btn-console" onclick="Panel.openConsole('${server.id}')">
-                    <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor"><path d="M20 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-5 14H4v-4h11v4zm0-5H4V9h11v4zm5 5h-4V9h4v9z"/></svg>
-                    إدارة السيرفر
-                </button>
-            </div>
-        `;
-        container.appendChild(card);
-    }
-};
-
-// 7. وظيفة زر الإنشاء
-function submitNewServer() {
-    ServerManager.createServer();
+class Particle {
+  constructor() { this.reset(); }
+  reset() {
+    this.x = Math.random() * canvas.width;
+    this.y = Math.random() * canvas.height;
+    this.size = Math.random() * 1.5 + 0.3;
+    this.speedX = (Math.random() - 0.5) * 0.4;
+    this.speedY = (Math.random() - 0.5) * 0.4;
+    this.opacity = Math.random() * 0.4 + 0.1;
+    const colors = ['rgba(0,212,255,', 'rgba(181,107,255,', 'rgba(0,255,136,'];
+    this.color = colors[Math.floor(Math.random() * colors.length)];
+  }
+  update() {
+    this.x += this.speedX;
+    this.y += this.speedY;
+    if (this.x < 0 || this.x > canvas.width || this.y < 0 || this.y > canvas.height) this.reset();
+  }
+  draw() {
+    ctx.beginPath();
+    ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+    ctx.fillStyle = this.color + this.opacity + ')';
+    ctx.fill();
+  }
 }
 
-// 8. نظام الـ Console / إدارة السيرفر (تحضير للخطوة القادمة)
-const Panel = {
-    openConsole: function(serverId) {
-        // التحقق من صلاحيات الآدمن
-        const access = prompt("[WANO DAEMON] - ROOT ACCESS REQUIRED:\nأدخل مفتاح التشفير للوصول إلى الطرفية (Terminal):");
-        if (access === SYSTEM_CONFIG.ADMIN_KEY) {
-            console.log(`[DAEMON]: Authenticated successfully for container ${serverId}.`);
-            alert(`جارٍ فتح اتصال WebSocket مع العقدة لتشغيل السيرفر ${serverId}... (سيتم برمجتها في صفحة الـ Console)`);
-            // مستقبلاً: window.location.href = `console.html?id=${serverId}`;
-        } else {
-            alert("[SECURITY BREACH]: تم رفض الوصول. تسجيل المحاولة في السجلات المركزية.");
-        }
-    }
-};
+for (let i = 0; i < 80; i++) particles.push(new Particle());
 
-// تحديث الموارد بشكل وهمي كل 5 ثواني لزيادة الواقعية (Real-time Simulation)
-setInterval(() => {
-    database.ref('servers').once('value', (snapshot) => {
-        if(snapshot.exists()){
-            snapshot.forEach((child) => {
-                const server = child.val();
-                if(server.status === 'running') {
-                    // تذبذب واقعي في استهلاك الـ CPU والـ RAM
-                    const newCpu = Math.max(0.1, (parseFloat(server.cpu_usage) + (Math.random() * 2 - 1))).toFixed(2);
-                    const newRam = Math.max(50, (server.ram_usage + Math.floor(Math.random() * 20 - 10)));
-                    database.ref('servers/' + child.key).update({
-                        cpu_usage: newCpu,
-                        ram_usage: newRam
-                    });
-                }
-            });
-        }
+function animateParticles() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  particles.forEach(p => { p.update(); p.draw(); });
+  requestAnimationFrame(animateParticles);
+}
+animateParticles();
+
+// ===== NAVBAR SCROLL =====
+const navbar = document.getElementById('navbar');
+window.addEventListener('scroll', () => {
+  navbar.classList.toggle('scrolled', window.scrollY > 20);
+});
+
+// ===== HAMBURGER =====
+const hamburger = document.getElementById('hamburger');
+const mobileMenu = document.getElementById('mobileMenu');
+hamburger.addEventListener('click', () => {
+  mobileMenu.classList.toggle('open');
+});
+
+// ===== COUNTER ANIMATION =====
+function animateCounter(el, target, suffix = '') {
+  let current = 0;
+  const step = target / 80;
+  const timer = setInterval(() => {
+    current = Math.min(current + step, target);
+    el.textContent = Math.floor(current).toLocaleString('ar');
+    if (current >= target) clearInterval(timer);
+  }, 20);
+}
+
+const statNums = document.querySelectorAll('.stat-num[data-target]');
+const statsObserver = new IntersectionObserver(entries => {
+  entries.forEach(entry => {
+    if (entry.isIntersecting) {
+      const el = entry.target;
+      animateCounter(el, parseInt(el.dataset.target));
+      statsObserver.unobserve(el);
+    }
+  });
+}, { threshold: 0.5 });
+statNums.forEach(el => statsObserver.observe(el));
+
+// ===== PERFORMANCE BARS ANIMATION =====
+function animateBars() {
+  const cpuBar = document.querySelector('.cpu-bar');
+  const ramBar = document.querySelector('.ram-bar');
+  const cpuVal = document.getElementById('cpuVal');
+  const ramVal = document.getElementById('ramVal');
+
+  function updateBars() {
+    const cpu = 35 + Math.random() * 30;
+    const ram = 40 + Math.random() * 35;
+    if (cpuBar) { cpuBar.style.width = cpu + '%'; }
+    if (cpuVal) cpuVal.textContent = Math.round(cpu);
+    if (ramBar) ramBar.style.width = ram + '%';
+    if (ramVal) ramVal.textContent = Math.round(ram);
+  }
+
+  const barsObserver = new IntersectionObserver(entries => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        updateBars();
+        setInterval(updateBars, 3000);
+        barsObserver.unobserve(entry.target);
+      }
     });
-}, 5000);
+  }, { threshold: 0.3 });
+
+  const featuresSection = document.querySelector('.features');
+  if (featuresSection) barsObserver.observe(featuresSection);
+}
+animateBars();
+
+// ===== TERMINAL ANIMATION =====
+const terminalLines = [
+  { type: 'cmd', text: 'wano deploy --project index.js' },
+  { type: 'output', text: '<i class="fa-solid fa-box-open"></i> تحليل مساحة العمل...' },
+  { type: 'output', text: '<i class="fa-solid fa-microchip"></i> فحص الموارد (Localhost)... ' },
+  { type: 'success', text: '<i class="fa-solid fa-check"></i> الكود آمن — لا مخالفات' },
+  { type: 'output', text: '<i class="fa-solid fa-server"></i> جاري تهيئة السيرفر المحلي...' },
+  { type: 'output', text: '<i class="fa-brands fa-node-js"></i> إعداد بيئة JavaScript...' },
+  { type: 'success', text: '<i class="fa-solid fa-check-double"></i> index.js يعمل الآن على المنفذ 3000' },
+  { type: 'output', text: '<i class="fa-solid fa-memory"></i> CPU: 12% | RAM: 128MB' },
+  { type: 'output', text: '<i class="fa-solid fa-fingerprint"></i> Host ID: wn-localhost-1' },
+  { type: 'success', text: '<i class="fa-solid fa-rocket"></i> تم إنشاء الهوست بنجاح! وقت التشغيل: 24/7' },
+];
+
+const terminalBody = document.getElementById('terminalBody');
+let terminalIdx = 1;
+let terminalRunning = false;
+
+function addTerminalLine(line, delay) {
+  return new Promise(resolve => {
+    setTimeout(() => {
+      const div = document.createElement('div');
+      if (line.type === 'cmd') {
+        div.className = 't-line';
+        div.innerHTML = `<span class="t-prompt">root@localhost:~$</span><span class="t-cmd"> ${line.text}</span>`;
+      } else {
+        div.className = `t-line t-output t-${line.type}`;
+        div.innerHTML = line.text; // Changed from textContent to innerHTML to render FontAwesome
+      }
+      terminalBody.appendChild(div);
+      terminalBody.scrollTop = terminalBody.scrollHeight;
+      resolve();
+    }, delay);
+  });
+}
+
+async function runTerminal() {
+  if (terminalRunning) return;
+  terminalRunning = true;
+  terminalBody.innerHTML = '';
+  const cursor = document.createElement('span');
+  cursor.className = 't-cursor';
+
+  for (let i = 0; i < terminalLines.length; i++) {
+    await addTerminalLine(terminalLines[i], i === 0 ? 200 : 600 + Math.random() * 400);
+  }
+
+  const lastLine = terminalBody.lastChild;
+  if (lastLine) lastLine.appendChild(cursor);
+
+  setTimeout(() => {
+    terminalRunning = false;
+    setTimeout(runTerminal, 3000);
+  }, 4000);
+}
+
+// Start terminal when hero is visible
+const heroObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) runTerminal(); });
+}, { threshold: 0.3 });
+heroObserver.observe(document.getElementById('hero'));
+
+// ===== SCROLL FADE-IN =====
+document.querySelectorAll('.feature-card, .plan-card, .rule-card, .section-header').forEach(el => {
+  el.classList.add('fade-in');
+});
+
+const fadeObserver = new IntersectionObserver(entries => {
+  entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+}, { threshold: 0.1 });
+
+document.querySelectorAll('.fade-in').forEach(el => fadeObserver.observe(el));
+
+// ===== STATUS SECTION =====
+const statusServices = [
+  { name: 'شبكة Wano (Localhost)', desc: 'مستقرة 100%', status: 'green', badge: 'ok', label: 'متصل' },
+  { name: 'خوادم Discord API', desc: 'مناطق: US, EU', status: 'green', badge: 'ok', label: 'متصل' },
+  { name: 'خوادم Baileys (WA)', desc: 'اتصال WebSocket', status: 'green', badge: 'ok', label: 'متصل' },
+  { name: 'لوحة التحكم', desc: 'Web Dashboard', status: 'green', badge: 'ok', label: 'يعمل' },
+  { name: 'نظام المراقبة', desc: 'PM2 Auto-scan', status: 'green', badge: 'ok', label: 'نشط' },
+  { name: 'قاعدة البيانات', desc: 'Firebase RTDB', status: 'green', badge: 'ok', label: 'متصل' },
+];
+
+function renderStatus() {
+  const grid = document.getElementById('statusGrid');
+  if (!grid) return;
+  grid.innerHTML = statusServices.map(s => `
+    <div class="status-item">
+      <span class="status-dot ${s.status}"></span>
+      <div class="status-info">
+        <div class="status-name">${s.name}</div>
+        <div class="status-desc">${s.desc}</div>
+      </div>
+      <span class="status-badge ${s.badge}">${s.label}</span>
+    </div>
+  `).join('');
+}
+renderStatus();
+
+// Uptime bars (30 days)
+function renderUptimeBars() {
+  const bars = document.getElementById('uptimeBars');
+  if (!bars) return;
+  const data = Array.from({ length: 30 }, (_, i) => {
+    const r = Math.random();
+    if (i === 7) return 'yellow';
+    if (r > 0.98) return 'yellow';
+    return 'green';
+  });
+  bars.innerHTML = data.map(c => {
+    const h = c === 'green' ? 100 : 60;
+    return `<div class="uptime-bar ${c}" style="height:${h}%" title="${c === 'green' ? '100%' : 'ضغط شبكة'}"></div>`;
+  }).join('');
+}
+renderUptimeBars();
+
+// ===== TOAST =====
+function showToast(msg, type = 'info') {
+  let toast = document.getElementById('toast');
+  if (!toast) {
+    toast = document.createElement('div');
+    toast.id = 'toast';
+    toast.className = 'toast';
+    document.body.appendChild(toast);
+  }
+  toast.innerHTML = msg; // Changed to innerHTML for FontAwesome
+  toast.className = `toast ${type} show`;
+  clearTimeout(toast._timer);
+  toast._timer = setTimeout(() => toast.classList.remove('show'), 3200);
+}
+
+// ===== AUTH MODAL =====
+const authModal = document.getElementById('authModal');
+const deployModal = document.getElementById('deployModal');
+
+function openAuthModal() {
+  authModal.classList.add('open');
+  document.getElementById('loginEmail').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginMsg').innerHTML = '';
+}
+function closeAuthModal() { authModal.classList.remove('open'); }
+function openDeployModal() { deployModal.classList.add('open'); }
+function closeDeployModal() { deployModal.classList.remove('open'); }
+
+// Trigger buttons
+document.getElementById('loginBtn').addEventListener('click', openAuthModal);
+document.getElementById('registerBtn').addEventListener('click', () => {
+  openAuthModal();
+  switchTab('register');
+});
+document.getElementById('loginBtnM').addEventListener('click', openAuthModal);
+document.getElementById('registerBtnM').addEventListener('click', () => { openAuthModal(); switchTab('register'); });
+document.getElementById('startFree').addEventListener('click', () => { openAuthModal(); switchTab('register'); });
+document.getElementById('watchDemo').addEventListener('click', () => {
+  document.getElementById('hero').scrollIntoView({ behavior: 'smooth' });
+  showToast('<i class="fa-solid fa-play"></i> انظر إلى سيرفر العرض أدناه', 'info');
+});
+document.getElementById('modalClose').addEventListener('click', closeAuthModal);
+document.getElementById('deployClose').addEventListener('click', closeDeployModal);
+
+authModal.addEventListener('click', e => { if (e.target === authModal) closeAuthModal(); });
+deployModal.addEventListener('click', e => { if (e.target === deployModal) closeDeployModal(); });
+
+// Tabs
+function switchTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('tabLogin').classList.toggle('active', isLogin);
+  document.getElementById('tabRegister').classList.toggle('active', !isLogin);
+  document.getElementById('formLogin').classList.toggle('hidden', !isLogin);
+  document.getElementById('formRegister').classList.toggle('hidden', isLogin);
+}
+document.getElementById('tabLogin').addEventListener('click', () => switchTab('login'));
+document.getElementById('tabRegister').addEventListener('click', () => switchTab('register'));
+
+// ===== FIREBASE AUTH =====
+document.getElementById('submitLogin').addEventListener('click', async () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const msg = document.getElementById('loginMsg');
+
+  if (!email || !password) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> يرجى تعبئة جميع الحقول';
+    return;
+  }
+
+  const btn = document.getElementById('submitLogin');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري المصادقة...';
+  btn.disabled = true;
+
+  try {
+    await auth.signInWithEmailAndPassword(email, password);
+    msg.className = 'form-msg success';
+    msg.innerHTML = '<i class="fa-solid fa-check-double"></i> تمت المصادقة بنجاح!';
+    setTimeout(closeAuthModal, 800);
+  } catch (err) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${getAuthError(err.code)}`;
+  } finally {
+    btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> دخول إلى اللوحة';
+    btn.disabled = false;
+  }
+});
+
+document.getElementById('submitRegister').addEventListener('click', async () => {
+  const username = document.getElementById('regUsername').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const msg = document.getElementById('registerMsg');
+
+  if (!username || !email || !password) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> يرجى تعبئة جميع الحقول';
+    return;
+  }
+  if (password.length < 8) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-shield-halved"></i> كلمة المرور يجب أن تكون 8 أحرف على الأقل';
+    return;
+  }
+
+  const btn = document.getElementById('submitRegister');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إعداد المساحة...';
+  btn.disabled = true;
+
+  try {
+    const cred = await auth.createUserWithEmailAndPassword(email, password);
+    await db.ref(`users/${cred.user.uid}`).set({
+      username,
+      email,
+      plan: 'free',
+      joinedAt: Date.now(),
+      bots: {}
+    });
+    msg.className = 'form-msg success';
+    msg.innerHTML = '<i class="fa-solid fa-check"></i> تم تجهيز الحساب والمساحة بنجاح!';
+    setTimeout(closeAuthModal, 800);
+  } catch (err) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${getAuthError(err.code)}`;
+  } finally {
+    btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> إنشاء الحساب';
+    btn.disabled = false;
+  }
+});
+
+function getAuthError(code) {
+  const errors = {
+    'auth/user-not-found': 'لا يوجد حساب بهذا البريد',
+    'auth/wrong-password': 'كلمة المرور غير صحيحة',
+    'auth/email-already-in-use': 'البريد مستخدم مسبقاً',
+    'auth/invalid-email': 'صيغة البريد غير صالحة',
+    'auth/too-many-requests': 'محاولات كثيرة، يرجى الانتظار',
+    'auth/weak-password': 'كلمة المرور ضعيفة',
+    'auth/invalid-credential': 'بيانات الدخول غير صحيحة',
+  };
+  return errors[code] || 'حدث خطأ في الاتصال، حاول مجدداً';
+}
+
+// ===== AUTH STATE LISTENER =====
+auth.onAuthStateChanged(async user => {
+  currentUser = user;
+  if (user) {
+    updateNavForUser(user);
+    await loadUserBots(user.uid);
+    renderDashboard(user);
+  } else {
+    resetNavForGuest();
+    showLoginPrompt();
+  }
+});
+
+function updateNavForUser(user) {
+  const actions = document.querySelector('.nav-actions');
+  if (!actions) return;
+  actions.innerHTML = `
+    <span style="color:var(--text-muted);font-size:0.88rem">مرحباً، <strong style="color:var(--text)">${user.displayName || user.email.split('@')[0]}</strong></span>
+    <button class="btn-primary" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+  `;
+  document.getElementById('logoutBtn').addEventListener('click', () => {
+    auth.signOut();
+    showToast('<i class="fa-solid fa-info-circle"></i> تم إنهاء الجلسة', 'info');
+  });
+}
+
+function resetNavForGuest() {
+  const actions = document.querySelector('.nav-actions');
+  if (!actions) return;
+  actions.innerHTML = `
+    <button class="btn-ghost" id="loginBtn">تسجيل الدخول</button>
+    <button class="btn-primary" id="registerBtn"><i class="fa-solid fa-rocket"></i> ابدأ مجاناً</button>
+  `;
+  document.getElementById('loginBtn').addEventListener('click', openAuthModal);
+  document.getElementById('registerBtn').addEventListener('click', () => { openAuthModal(); switchTab('register'); });
+}
+
+async function loadUserBots(uid) {
+  try {
+    const snap = await db.ref(`users/${uid}/bots`).get();
+    userBots = snap.exists() ? Object.entries(snap.val()).map(([id, data]) => ({ id, ...data })) : [];
+  } catch (e) {
+    userBots = [];
+  }
+}
+
+function showLoginPrompt() {
+  const container = document.getElementById('botsContainer');
+  if (!container) return;
+  container.innerHTML = `
+    <div class="login-prompt" id="loginPrompt">
+      <div class="login-prompt-icon"><i class="fa-solid fa-terminal"></i></div>
+      <h3>سجّل دخول لإدارة مساحة العمل</h3>
+      <p>بيئة استضافة مجانية ومستقرة لمشاريع JavaScript</p>
+      <button class="btn-primary" id="loginPromptBtn"><i class="fa-solid fa-right-to-bracket"></i> تسجيل الدخول / إنشاء حساب</button>
+    </div>
+  `;
+  document.getElementById('loginPromptBtn').addEventListener('click', openAuthModal);
+}
+
+function renderDashboard(user) {
+  const container = document.getElementById('botsContainer');
+  if (!container) return;
+
+  const platformIcons = {
+    discord: '<i class="fa-brands fa-discord"></i>', 
+    telegram: '<i class="fa-brands fa-telegram"></i>', 
+    whatsapp: '<i class="fa-brands fa-whatsapp"></i>',
+    slack: '<i class="fa-brands fa-slack"></i>', 
+    twitter: '<i class="fa-brands fa-x-twitter"></i>', 
+    custom: '<i class="fa-solid fa-code"></i>'
+  };
+
+  const botsHtml = userBots.length === 0
+    ? `<div class="login-prompt" style="border-style:dashed">
+        <div class="login-prompt-icon"><i class="fa-solid fa-server"></i></div>
+        <h3>لا توجد مشاريع مرفوعة بعد</h3>
+        <p>قم بإنشاء هوست جديد لرفع كود الـ JS الخاص بك</p>
+        <button class="btn-primary" id="addFirstBot"><i class="fa-solid fa-plus"></i> إنشاء هوست</button>
+      </div>`
+    : `<div class="bots-list">
+        ${userBots.map(bot => `
+          <div class="bot-card" data-id="${bot.id}">
+            <div class="bot-icon ${bot.platform || 'discord'}">${platformIcons[bot.platform] || '<i class="fa-solid fa-robot"></i>'}</div>
+            <div class="bot-info">
+              <div class="bot-name">${bot.name}</div>
+              <div class="bot-meta">
+                <span class="bot-stat"><i class="fa-solid fa-globe"></i> ${bot.platform || 'discord'}</span>
+                <span class="bot-stat"><i class="fa-brands fa-node-js"></i> ${bot.lang || 'Node.js'}</span>
+                <span class="bot-stat"><i class="fa-solid fa-calendar-days"></i> ${new Date(bot.createdAt || Date.now()).toLocaleDateString('ar')}</span>
+              </div>
+            </div>
+            ${bot.running !== false
+              ? `<span class="running-badge"><span class="pulse-dot"></span>متصل (Online)</span>`
+              : `<span class="stopped-badge"><i class="fa-solid fa-circle-pause"></i> متوقف</span>`}
+            <div class="bot-actions">
+              <button class="bot-btn restart" data-id="${bot.id}" data-action="restart"><i class="fa-solid fa-rotate-right"></i> إعادة</button>
+              <button class="bot-btn stop" data-id="${bot.id}" data-action="${bot.running !== false ? 'stop' : 'start'}">${bot.running !== false ? '<i class="fa-solid fa-stop"></i> إيقاف' : '<i class="fa-solid fa-play"></i> تشغيل'}</button>
+              <button class="bot-btn delete" data-id="${bot.id}" data-action="delete"><i class="fa-solid fa-trash"></i></button>
+            </div>
+          </div>
+        `).join('')}
+      </div>`;
+
+  container.innerHTML = `
+    <    div class="dashboard-header">
+      <div class="user-info">
+        <div class="user-avatar">${(user.displayName || user.email)[0].toUpperCase()}</div>
+        <div>
+          <div class="user-name">${user.displayName || user.email.split('@')[0]}</div>
+          <div class="user-plan"><i class="fa-solid fa-bolt" style="color: var(--neon-blue);"></i> استضافة مجانية — ${userBots.length} مساحة مستخدمة</div>
+        </div>
+      </div>
+      <div class="dashboard-actions">
+        <button class="btn-primary" id="addBotBtn"><i class="fa-solid fa-plus"></i> إنشاء هوست جديد</button>
+        <button class="btn-ghost" id="logoutDash"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
+      </div>
+    </div>
+    ${botsHtml}
+  `;
+
+  // Event listeners
+  document.getElementById('addBotBtn')?.addEventListener('click', openDeployModal);
+  document.getElementById('addFirstBot')?.addEventListener('click', openDeployModal);
+  document.getElementById('logoutDash')?.addEventListener('click', () => {
+    auth.signOut();
+    showToast('<i class="fa-solid fa-info-circle"></i> تم إنهاء الجلسة', 'info');
+  });
+
+  // Bot action buttons
+  container.querySelectorAll('[data-action]').forEach(btn => {
+    btn.addEventListener('click', () => handleBotAction(btn.dataset.id, btn.dataset.action));
+  });
+}
+
+async function handleBotAction(botId, action) {
+  if (!currentUser) return;
+  const botRef = db.ref(`users/${currentUser.uid}/bots/${botId}`);
+
+  if (action === 'restart') {
+    showToast('<i class="fa-solid fa-rotate-right fa-spin"></i> جاري إعادة تشغيل السيرفر...', 'info');
+    await botRef.update({ running: false });
+    setTimeout(async () => {
+      await botRef.update({ running: true });
+      showToast('<i class="fa-solid fa-check"></i> تم إعادة التشغيل بنجاح!', 'success');
+      await loadUserBots(currentUser.uid);
+      renderDashboard(currentUser);
+    }, 1800);
+
+  } else if (action === 'stop') {
+    await botRef.update({ running: false });
+    showToast('<i class="fa-solid fa-stop"></i> تم إيقاف عملية الـ Node.js', 'info');
+    await loadUserBots(currentUser.uid);
+    renderDashboard(currentUser);
+
+  } else if (action === 'start') {
+    await botRef.update({ running: true });
+    showToast('<i class="fa-solid fa-play"></i> تم تشغيل المشروع!', 'success');
+    await loadUserBots(currentUser.uid);
+    renderDashboard(currentUser);
+
+  } else if (action === 'delete') {
+    if (!confirm('هل أنت متأكد من حذف هذه المساحة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.')) return;
+    await botRef.remove();
+    showToast('<i class="fa-solid fa-trash"></i> تم حذف المشروع نهائياً', 'info');
+    await loadUserBots(currentUser.uid);
+    renderDashboard(currentUser);
+  }
+}
+
+// ===== DEPLOY BOT =====
+const BANNED_KEYWORDS = [
+  'selfbot', 'discord-self', 'nuker', 'nuke', 'raider', 'raid', 
+  'massdm', 'mass-dm', 'hosting-bot', 'hostbot', 'vpn-bot', 'proxy-bot'
+];
+
+function aiBotNameCheck(name) {
+  const lower = name.toLowerCase();
+  return BANNED_KEYWORDS.some(k => lower.includes(k));
+}
+
+document.getElementById('submitDeploy').addEventListener('click', async () => {
+  if (!currentUser) { openAuthModal(); return; }
+
+  const name = document.getElementById('botName').value.trim();
+  const platform = document.getElementById('botPlatform').value;
+  const lang = document.getElementById('botLang').value;
+  const msg = document.getElementById('deployMsg');
+
+  if (!name) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> يرجى إدخال اسم المشروع';
+    return;
+  }
+
+  // AI check
+  if (aiBotNameCheck(name)) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-shield-halved"></i> جدار الحماية: اسم المشروع يحتوي على كلمات محظورة.';
+    showToast('<i class="fa-solid fa-ban"></i> جدار الحماية: تم رفض الإنشاء.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('submitDeploy');
+  btn.innerHTML = '<i class="fa-solid fa-microchip fa-fade"></i> جاري تخصيص الموارد...';
+  btn.disabled = true;
+  msg.className = 'form-msg';
+  msg.innerHTML = '';
+
+  await new Promise(r => setTimeout(r, 1200));
+  btn.innerHTML = '<i class="fa-solid fa-rocket fa-bounce"></i> جاري الرفع...';
+
+  try {
+    const botId = 'host_' + Date.now();
+    const botData = {
+      name,
+      platform,
+      lang,
+      running: true,
+      createdAt: Date.now(),
+      aiScan: 'passed'
+    };
+
+    await db.ref(`users/${currentUser.uid}/bots/${botId}`).set(botData);
+
+    msg.className = 'form-msg success';
+    msg.innerHTML = '<i class="fa-solid fa-check-double"></i> تم إعداد مساحة العمل بنجاح!';
+    showToast(`<i class="fa-solid fa-server"></i> الهوست ${name} يعمل الآن على خوادمنا!`, 'success');
+
+    setTimeout(async () => {
+      closeDeployModal();
+      document.getElementById('botName').value = '';
+      await loadUserBots(currentUser.uid);
+      renderDashboard(currentUser);
+      document.getElementById('bots').scrollIntoView({ behavior: 'smooth' });
+    }, 1000);
+
+  } catch (e) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> فشل الاتصال، حاول مرة أخرى.';
+  } finally {
+    btn.innerHTML = '<i class="fa-solid fa-rocket"></i> بدء التنصيب والتشغيل';
+    btn.disabled = false;
+  }
+});
+
+// ===== PLAN SELECTION =====
+function selectPlan(plan) {
+  if (!currentUser) {
+    openAuthModal();
+    showToast('<i class="fa-solid fa-info-circle"></i> يرجى تسجيل الدخول أولاً لإنشاء الهوست', 'info');
+    return;
+  }
+  const labels = { free: 'Starter', pro: 'Advanced', business: 'Studio Max' };
+  showToast(`<i class="fa-solid fa-circle-check"></i> تم تخصيص مساحة العمل (${labels[plan]}) مجاناً لحسابك بنجاح!`, 'success');
+}
+window.selectPlan = selectPlan;
+
+// ===== NEON GLOW ON HOVER (interactive) =====
+document.querySelectorAll('.feature-card, .plan-card, .rule-card').forEach(card => {
+  card.addEventListener('mousemove', e => {
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    card.style.setProperty('--mx', x + 'px');
+    card.style.setProperty('--my', y + 'px');
+  });
+});
+
+// ===== KEYBOARD SHORTCUTS =====
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') {
+    closeAuthModal();
+    closeDeployModal();
+  }
+});
+
+// ===== SMOOTH SCROLL FOR NAV LINKS =====
+document.querySelectorAll('a[href^="#"]').forEach(a => {
+  a.addEventListener('click', e => {
+    e.preventDefault();
+    const target = document.querySelector(a.getAttribute('href'));
+    if (target) {
+      target.scrollIntoView({ behavior: 'smooth' });
+      mobileMenu.classList.remove('open');
+    }
+  });
+});
+
+console.log('%c WanoHost [Localhost Env]', 'color:#00d4ff;font-size:24px;font-weight:bold');
+console.log('%c استضافة بيئات JavaScript احترافية ومجانية', 'color:#00ff88;font-size:14px');
