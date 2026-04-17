@@ -1,22 +1,7 @@
-// ===== FIREBASE CONFIG =====
-// ملاحظة لمروان: لا تنسى تحط مفاتيح الفايربيس الحقيقية مالتك هنا
-const firebaseConfig = {
-  databaseURL: "https://wano-studio-default-rtdb.firebaseio.com",
-  apiKey: "AIzaSyPlaceholder_ReplaceWithYourKey",
-  authDomain: "wano-studio.firebaseapp.com",
-  projectId: "wano-studio",
-  storageBucket: "wano-studio.appspot.com",
-  messagingSenderId: "000000000000",
-  appId: "1:000000000000:web:placeholder"
-};
-
-firebase.initializeApp(firebaseConfig);
-const auth = firebase.auth();
-const db = firebase.database();
-
-// ===== STATE =====
-let currentUser = null;
-let userBots = [];
+// ===== STATE (LocalStorage System) =====
+// هنا لغينا الفايربيس وصار الاعتماد على ذاكرة المتصفح
+let currentUser = JSON.parse(localStorage.getItem('wano_user')) || null;
+let userBots = JSON.parse(localStorage.getItem('wano_bots')) || [];
 
 // ===== CURSOR GLOW =====
 const cursorGlow = document.getElementById('cursorGlow');
@@ -93,7 +78,7 @@ hamburger.addEventListener('click', () => {
 });
 
 // ===== COUNTER ANIMATION =====
-function animateCounter(el, target, suffix = '') {
+function animateCounter(el, target) {
   let current = 0;
   const step = target / 80;
   const timer = setInterval(() => {
@@ -173,7 +158,7 @@ function addTerminalLine(line, delay) {
         div.innerHTML = `<span class="t-prompt">root@localhost:~$</span><span class="t-cmd"> ${line.text}</span>`;
       } else {
         div.className = `t-line t-output t-${line.type}`;
-        div.innerHTML = line.text; // Changed from textContent to innerHTML to render FontAwesome
+        div.innerHTML = line.text;
       }
       terminalBody.appendChild(div);
       terminalBody.scrollTop = terminalBody.scrollHeight;
@@ -202,7 +187,6 @@ async function runTerminal() {
   }, 4000);
 }
 
-// Start terminal when hero is visible
 const heroObserver = new IntersectionObserver(entries => {
   entries.forEach(e => { if (e.isIntersecting) runTerminal(); });
 }, { threshold: 0.3 });
@@ -226,7 +210,7 @@ const statusServices = [
   { name: 'خوادم Baileys (WA)', desc: 'اتصال WebSocket', status: 'green', badge: 'ok', label: 'متصل' },
   { name: 'لوحة التحكم', desc: 'Web Dashboard', status: 'green', badge: 'ok', label: 'يعمل' },
   { name: 'نظام المراقبة', desc: 'PM2 Auto-scan', status: 'green', badge: 'ok', label: 'نشط' },
-  { name: 'قاعدة البيانات', desc: 'Firebase RTDB', status: 'green', badge: 'ok', label: 'متصل' },
+  { name: 'قاعدة البيانات (Local)', desc: 'Browser Storage', status: 'green', badge: 'ok', label: 'متصل' },
 ];
 
 function renderStatus() {
@@ -245,7 +229,6 @@ function renderStatus() {
 }
 renderStatus();
 
-// Uptime bars (30 days)
 function renderUptimeBars() {
   const bars = document.getElementById('uptimeBars');
   if (!bars) return;
@@ -271,7 +254,7 @@ function showToast(msg, type = 'info') {
     toast.className = 'toast';
     document.body.appendChild(toast);
   }
-  toast.innerHTML = msg; // Changed to innerHTML for FontAwesome
+  toast.innerHTML = msg;
   toast.className = `toast ${type} show`;
   clearTimeout(toast._timer);
   toast._timer = setTimeout(() => toast.classList.remove('show'), 3200);
@@ -291,7 +274,6 @@ function closeAuthModal() { authModal.classList.remove('open'); }
 function openDeployModal() { deployModal.classList.add('open'); }
 function closeDeployModal() { deployModal.classList.remove('open'); }
 
-// Trigger buttons
 document.getElementById('loginBtn').addEventListener('click', openAuthModal);
 document.getElementById('registerBtn').addEventListener('click', () => {
   openAuthModal();
@@ -310,7 +292,6 @@ document.getElementById('deployClose').addEventListener('click', closeDeployModa
 authModal.addEventListener('click', e => { if (e.target === authModal) closeAuthModal(); });
 deployModal.addEventListener('click', e => { if (e.target === deployModal) closeDeployModal(); });
 
-// Tabs
 function switchTab(tab) {
   const isLogin = tab === 'login';
   document.getElementById('tabLogin').classList.toggle('active', isLogin);
@@ -321,37 +302,8 @@ function switchTab(tab) {
 document.getElementById('tabLogin').addEventListener('click', () => switchTab('login'));
 document.getElementById('tabRegister').addEventListener('click', () => switchTab('register'));
 
-// ===== FIREBASE AUTH =====
-document.getElementById('submitLogin').addEventListener('click', async () => {
-  const email = document.getElementById('loginEmail').value.trim();
-  const password = document.getElementById('loginPassword').value;
-  const msg = document.getElementById('loginMsg');
-
-  if (!email || !password) {
-    msg.className = 'form-msg error';
-    msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> يرجى تعبئة جميع الحقول';
-    return;
-  }
-
-  const btn = document.getElementById('submitLogin');
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري المصادقة...';
-  btn.disabled = true;
-
-  try {
-    await auth.signInWithEmailAndPassword(email, password);
-    msg.className = 'form-msg success';
-    msg.innerHTML = '<i class="fa-solid fa-check-double"></i> تمت المصادقة بنجاح!';
-    setTimeout(closeAuthModal, 800);
-  } catch (err) {
-    msg.className = 'form-msg error';
-    msg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${getAuthError(err.code)}`;
-  } finally {
-    btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> دخول إلى اللوحة';
-    btn.disabled = false;
-  }
-});
-
-document.getElementById('submitRegister').addEventListener('click', async () => {
+// ===== LOCAL AUTH SYSTEM =====
+document.getElementById('submitRegister').addEventListener('click', () => {
   const username = document.getElementById('regUsername').value.trim();
   const email = document.getElementById('regEmail').value.trim();
   const password = document.getElementById('regPassword').value;
@@ -369,65 +321,91 @@ document.getElementById('submitRegister').addEventListener('click', async () => 
   }
 
   const btn = document.getElementById('submitRegister');
-  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إعداد المساحة...';
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري إنشاء الحساب...';
   btn.disabled = true;
 
-  try {
-    const cred = await auth.createUserWithEmailAndPassword(email, password);
-    await db.ref(`users/${cred.user.uid}`).set({
-      username,
-      email,
-      plan: 'free',
-      joinedAt: Date.now(),
-      bots: {}
-    });
+  setTimeout(() => {
+    // حفظ المستخدم بالمحلي
+    const newUser = { username, email, password, joinedAt: Date.now() };
+    localStorage.setItem('wano_user', JSON.stringify(newUser));
+    localStorage.setItem('wano_bots', JSON.stringify([])); // تصفير البوتات للحساب الجديد
+    
+    currentUser = newUser;
+    userBots = [];
+
     msg.className = 'form-msg success';
-    msg.innerHTML = '<i class="fa-solid fa-check"></i> تم تجهيز الحساب والمساحة بنجاح!';
-    setTimeout(closeAuthModal, 800);
-  } catch (err) {
-    msg.className = 'form-msg error';
-    msg.innerHTML = `<i class="fa-solid fa-circle-exclamation"></i> ${getAuthError(err.code)}`;
-  } finally {
+    msg.innerHTML = '<i class="fa-solid fa-check"></i> تم إنشاء الحساب بنجاح!';
+    
+    setTimeout(() => {
+      closeAuthModal();
+      updateAuthState();
+    }, 800);
+    
     btn.innerHTML = '<i class="fa-solid fa-user-plus"></i> إنشاء الحساب';
     btn.disabled = false;
-  }
+  }, 800);
 });
 
-function getAuthError(code) {
-  const errors = {
-    'auth/user-not-found': 'لا يوجد حساب بهذا البريد',
-    'auth/wrong-password': 'كلمة المرور غير صحيحة',
-    'auth/email-already-in-use': 'البريد مستخدم مسبقاً',
-    'auth/invalid-email': 'صيغة البريد غير صالحة',
-    'auth/too-many-requests': 'محاولات كثيرة، يرجى الانتظار',
-    'auth/weak-password': 'كلمة المرور ضعيفة',
-    'auth/invalid-credential': 'بيانات الدخول غير صحيحة',
-  };
-  return errors[code] || 'حدث خطأ في الاتصال، حاول مجدداً';
-}
+document.getElementById('submitLogin').addEventListener('click', () => {
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  const msg = document.getElementById('loginMsg');
 
-// ===== AUTH STATE LISTENER =====
-auth.onAuthStateChanged(async user => {
-  currentUser = user;
-  if (user) {
-    updateNavForUser(user);
-    await loadUserBots(user.uid);
-    renderDashboard(user);
+  if (!email || !password) {
+    msg.className = 'form-msg error';
+    msg.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i> يرجى تعبئة جميع الحقول';
+    return;
+  }
+
+  const btn = document.getElementById('submitLogin');
+  btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> جاري المصادقة...';
+  btn.disabled = true;
+
+  setTimeout(() => {
+    const savedUser = JSON.parse(localStorage.getItem('wano_user'));
+    
+    if (savedUser && savedUser.email === email && savedUser.password === password) {
+      currentUser = savedUser;
+      userBots = JSON.parse(localStorage.getItem('wano_bots')) || [];
+      
+      msg.className = 'form-msg success';
+      msg.innerHTML = '<i class="fa-solid fa-check-double"></i> تمت المصادقة بنجاح!';
+      setTimeout(() => {
+        closeAuthModal();
+        updateAuthState();
+      }, 800);
+    } else {
+      msg.className = 'form-msg error';
+      msg.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> البريد أو كلمة المرور غير صحيحة';
+    }
+    
+    btn.innerHTML = '<i class="fa-solid fa-right-to-bracket"></i> دخول إلى اللوحة';
+    btn.disabled = false;
+  }, 800);
+});
+
+// ===== STATE UI UPDATER =====
+function updateAuthState() {
+  if (currentUser) {
+    updateNavForUser(currentUser);
+    renderDashboard(currentUser);
   } else {
     resetNavForGuest();
     showLoginPrompt();
   }
-});
+}
 
 function updateNavForUser(user) {
   const actions = document.querySelector('.nav-actions');
   if (!actions) return;
   actions.innerHTML = `
-    <span style="color:var(--text-muted);font-size:0.88rem">مرحباً، <strong style="color:var(--text)">${user.displayName || user.email.split('@')[0]}</strong></span>
+    <span style="color:var(--text-muted);font-size:0.88rem">مرحباً، <strong style="color:var(--text)">${user.username || user.email.split('@')[0]}</strong></span>
     <button class="btn-primary" id="logoutBtn"><i class="fa-solid fa-right-from-bracket"></i> خروج</button>
   `;
   document.getElementById('logoutBtn').addEventListener('click', () => {
-    auth.signOut();
+    currentUser = null;
+    userBots = [];
+    updateAuthState();
     showToast('<i class="fa-solid fa-info-circle"></i> تم إنهاء الجلسة', 'info');
   });
 }
@@ -441,15 +419,6 @@ function resetNavForGuest() {
   `;
   document.getElementById('loginBtn').addEventListener('click', openAuthModal);
   document.getElementById('registerBtn').addEventListener('click', () => { openAuthModal(); switchTab('register'); });
-}
-
-async function loadUserBots(uid) {
-  try {
-    const snap = await db.ref(`users/${uid}/bots`).get();
-    userBots = snap.exists() ? Object.entries(snap.val()).map(([id, data]) => ({ id, ...data })) : [];
-  } catch (e) {
-    userBots = [];
-  }
 }
 
 function showLoginPrompt() {
@@ -511,11 +480,11 @@ function renderDashboard(user) {
       </div>`;
 
   container.innerHTML = `
-    <    div class="dashboard-header">
+    <div class="dashboard-header">
       <div class="user-info">
-        <div class="user-avatar">${(user.displayName || user.email)[0].toUpperCase()}</div>
+        <div class="user-avatar">${(user.username || user.email)[0].toUpperCase()}</div>
         <div>
-          <div class="user-name">${user.displayName || user.email.split('@')[0]}</div>
+          <div class="user-name">${user.username || user.email.split('@')[0]}</div>
           <div class="user-plan"><i class="fa-solid fa-bolt" style="color: var(--neon-blue);"></i> استضافة مجانية — ${userBots.length} مساحة مستخدمة</div>
         </div>
       </div>
@@ -527,51 +496,54 @@ function renderDashboard(user) {
     ${botsHtml}
   `;
 
-  // Event listeners
   document.getElementById('addBotBtn')?.addEventListener('click', openDeployModal);
   document.getElementById('addFirstBot')?.addEventListener('click', openDeployModal);
   document.getElementById('logoutDash')?.addEventListener('click', () => {
-    auth.signOut();
+    currentUser = null;
+    userBots = [];
+    updateAuthState();
     showToast('<i class="fa-solid fa-info-circle"></i> تم إنهاء الجلسة', 'info');
   });
 
-  // Bot action buttons
   container.querySelectorAll('[data-action]').forEach(btn => {
     btn.addEventListener('click', () => handleBotAction(btn.dataset.id, btn.dataset.action));
   });
 }
 
-async function handleBotAction(botId, action) {
+function handleBotAction(botId, action) {
   if (!currentUser) return;
-  const botRef = db.ref(`users/${currentUser.uid}/bots/${botId}`);
+  const botIndex = userBots.findIndex(b => b.id === botId);
+  if (botIndex === -1) return;
 
   if (action === 'restart') {
     showToast('<i class="fa-solid fa-rotate-right fa-spin"></i> جاري إعادة تشغيل السيرفر...', 'info');
-    await botRef.update({ running: false });
-    setTimeout(async () => {
-      await botRef.update({ running: true });
+    userBots[botIndex].running = false;
+    renderDashboard(currentUser);
+    
+    setTimeout(() => {
+      userBots[botIndex].running = true;
+      localStorage.setItem('wano_bots', JSON.stringify(userBots));
       showToast('<i class="fa-solid fa-check"></i> تم إعادة التشغيل بنجاح!', 'success');
-      await loadUserBots(currentUser.uid);
       renderDashboard(currentUser);
     }, 1800);
 
   } else if (action === 'stop') {
-    await botRef.update({ running: false });
+    userBots[botIndex].running = false;
+    localStorage.setItem('wano_bots', JSON.stringify(userBots));
     showToast('<i class="fa-solid fa-stop"></i> تم إيقاف عملية الـ Node.js', 'info');
-    await loadUserBots(currentUser.uid);
     renderDashboard(currentUser);
 
   } else if (action === 'start') {
-    await botRef.update({ running: true });
+    userBots[botIndex].running = true;
+    localStorage.setItem('wano_bots', JSON.stringify(userBots));
     showToast('<i class="fa-solid fa-play"></i> تم تشغيل المشروع!', 'success');
-    await loadUserBots(currentUser.uid);
     renderDashboard(currentUser);
 
   } else if (action === 'delete') {
-    if (!confirm('هل أنت متأكد من حذف هذه المساحة بالكامل؟ لا يمكن التراجع عن هذا الإجراء.')) return;
-    await botRef.remove();
+    if (!confirm('هل أنت متأكد من حذف هذه المساحة بالكامل؟ لا يمكن التراجع.')) return;
+    userBots.splice(botIndex, 1);
+    localStorage.setItem('wano_bots', JSON.stringify(userBots));
     showToast('<i class="fa-solid fa-trash"></i> تم حذف المشروع نهائياً', 'info');
-    await loadUserBots(currentUser.uid);
     renderDashboard(currentUser);
   }
 }
@@ -587,7 +559,7 @@ function aiBotNameCheck(name) {
   return BANNED_KEYWORDS.some(k => lower.includes(k));
 }
 
-document.getElementById('submitDeploy').addEventListener('click', async () => {
+document.getElementById('submitDeploy').addEventListener('click', () => {
   if (!currentUser) { openAuthModal(); return; }
 
   const name = document.getElementById('botName').value.trim();
@@ -601,7 +573,6 @@ document.getElementById('submitDeploy').addEventListener('click', async () => {
     return;
   }
 
-  // AI check
   if (aiBotNameCheck(name)) {
     msg.className = 'form-msg error';
     msg.innerHTML = '<i class="fa-solid fa-shield-halved"></i> جدار الحماية: اسم المشروع يحتوي على كلمات محظورة.';
@@ -615,44 +586,39 @@ document.getElementById('submitDeploy').addEventListener('click', async () => {
   msg.className = 'form-msg';
   msg.innerHTML = '';
 
-  await new Promise(r => setTimeout(r, 1200));
-  btn.innerHTML = '<i class="fa-solid fa-rocket fa-bounce"></i> جاري الرفع...';
+  setTimeout(() => {
+    btn.innerHTML = '<i class="fa-solid fa-rocket fa-bounce"></i> جاري الرفع...';
+    
+    setTimeout(() => {
+      const newBot = {
+        id: 'host_' + Date.now(),
+        name,
+        platform,
+        lang,
+        running: true,
+        createdAt: Date.now()
+      };
 
-  try {
-    const botId = 'host_' + Date.now();
-    const botData = {
-      name,
-      platform,
-      lang,
-      running: true,
-      createdAt: Date.now(),
-      aiScan: 'passed'
-    };
+      userBots.push(newBot);
+      localStorage.setItem('wano_bots', JSON.stringify(userBots));
 
-    await db.ref(`users/${currentUser.uid}/bots/${botId}`).set(botData);
+      msg.className = 'form-msg success';
+      msg.innerHTML = '<i class="fa-solid fa-check-double"></i> تم إعداد مساحة العمل بنجاح!';
+      showToast(`<i class="fa-solid fa-server"></i> الهوست ${name} يعمل الآن!`, 'success');
 
-    msg.className = 'form-msg success';
-    msg.innerHTML = '<i class="fa-solid fa-check-double"></i> تم إعداد مساحة العمل بنجاح!';
-    showToast(`<i class="fa-solid fa-server"></i> الهوست ${name} يعمل الآن على خوادمنا!`, 'success');
-
-    setTimeout(async () => {
-      closeDeployModal();
-      document.getElementById('botName').value = '';
-      await loadUserBots(currentUser.uid);
-      renderDashboard(currentUser);
-      document.getElementById('bots').scrollIntoView({ behavior: 'smooth' });
+      setTimeout(() => {
+        closeDeployModal();
+        document.getElementById('botName').value = '';
+        renderDashboard(currentUser);
+        document.getElementById('bots').scrollIntoView({ behavior: 'smooth' });
+      }, 1000);
+      
+      btn.innerHTML = '<i class="fa-solid fa-rocket"></i> بدء التنصيب والتشغيل';
+      btn.disabled = false;
     }, 1000);
-
-  } catch (e) {
-    msg.className = 'form-msg error';
-    msg.innerHTML = '<i class="fa-solid fa-circle-exclamation"></i> فشل الاتصال، حاول مرة أخرى.';
-  } finally {
-    btn.innerHTML = '<i class="fa-solid fa-rocket"></i> بدء التنصيب والتشغيل';
-    btn.disabled = false;
-  }
+  }, 800);
 });
 
-// ===== PLAN SELECTION =====
 function selectPlan(plan) {
   if (!currentUser) {
     openAuthModal();
@@ -664,7 +630,6 @@ function selectPlan(plan) {
 }
 window.selectPlan = selectPlan;
 
-// ===== NEON GLOW ON HOVER (interactive) =====
 document.querySelectorAll('.feature-card, .plan-card, .rule-card').forEach(card => {
   card.addEventListener('mousemove', e => {
     const rect = card.getBoundingClientRect();
@@ -675,7 +640,6 @@ document.querySelectorAll('.feature-card, .plan-card, .rule-card').forEach(card 
   });
 });
 
-// ===== KEYBOARD SHORTCUTS =====
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     closeAuthModal();
@@ -683,7 +647,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// ===== SMOOTH SCROLL FOR NAV LINKS =====
 document.querySelectorAll('a[href^="#"]').forEach(a => {
   a.addEventListener('click', e => {
     e.preventDefault();
@@ -695,5 +658,8 @@ document.querySelectorAll('a[href^="#"]').forEach(a => {
   });
 });
 
-console.log('%c WanoHost [Localhost Env]', 'color:#00d4ff;font-size:24px;font-weight:bold');
-console.log('%c استضافة بيئات JavaScript احترافية ومجانية', 'color:#00ff88;font-size:14px');
+// Initialize on page load
+updateAuthState();
+
+console.log('%c WanoHost [Local Storage Env]', 'color:#00d4ff;font-size:24px;font-weight:bold');
+console.log('%c يعمل بدون قواعد بيانات (حفظ بالمتصفح)', 'color:#00ff88;font-size:14px');
